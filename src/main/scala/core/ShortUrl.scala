@@ -1,17 +1,12 @@
 package core
 
-import java.net.URLEncoder
-import java.nio.charset.{StandardCharsets, Charset}
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
-
 import akka.actor.ActorSystem
 import com.redis.RedisClient
 import spray.http.StatusCodes
-import spray.httpx.marshalling.Marshaller
 import spray.routing.{Route, SimpleRoutingApp, ValidationRejection}
 
 import scala.concurrent.Future
+import scala.util.Random
 
 /**
  *
@@ -19,10 +14,7 @@ import scala.concurrent.Future
 object ShortUrl extends App with SimpleRoutingApp {
 
   implicit val actorSystem = ActorSystem("Short-Url")
-  val algo = "HmacSHA1"
-  val mac = Mac.getInstance(algo)
   val redisClient = new RedisClient()
-  mac.init(new SecretKeySpec("short-url".getBytes(), algo))
   startServer("0.0.0.0", 8080)(route)
 
 
@@ -32,8 +24,7 @@ object ShortUrl extends App with SimpleRoutingApp {
     path("shorten") {
       post { ctx =>
         val r = ctx.request.entity.asString
-        val url = URLEncoder.encode(mac.doFinal(r.getBytes()).mkString, StandardCharsets.UTF_8.toString)
-        println(url)
+        val url = Random.alphanumeric.take(7).mkString
         val f = Future(redisClient.set(url, r))
 
         f.mapTo[Boolean].map {
