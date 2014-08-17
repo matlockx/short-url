@@ -1,9 +1,11 @@
 package core
 
 import akka.actor.ActorSystem
+import akka.cluster.Cluster
 import com.redis.RedisClient
 import spray.http.StatusCodes
-import spray.routing.{Route, SimpleRoutingApp, ValidationRejection}
+import spray.routing.PathMatchers.Rest
+import spray.routing.{HttpService, Route, SimpleRoutingApp, ValidationRejection}
 
 import scala.concurrent.Future
 import scala.util.Random
@@ -11,11 +13,19 @@ import scala.util.Random
 /**
  *
  */
-object ShortUrl extends App with SimpleRoutingApp {
+object ShortUrl extends App with ShortUrlService with SimpleRoutingApp {
 
   implicit val actorSystem = ActorSystem("Short-Url")
+  val cluster = Cluster(actorSystem)
+
+  actorSystem.log.info("Starting")
+  startServer("0.0.0.0", actorSystem.settings.config.getInt("port"))(route)
+
+}
+
+trait ShortUrlService {
+  self: HttpService =>
   val redisClient = new RedisClient()
-  startServer("0.0.0.0", 8080)(route)
 
 
   implicit def executionContext = actorRefFactory.dispatcher
@@ -34,16 +44,16 @@ object ShortUrl extends App with SimpleRoutingApp {
           case _ => ctx.reject(ValidationRejection(s"Cannot save url $r"))
         }
       }
-    }~
-    path(Rest) { r =>
-      get { ctx =>
-        Future(redisClient.get(r)).mapTo[Option[String]].map {
-          case Some(result) => ctx.redirect(result, StatusCodes.MovedPermanently)
-          case None => ctx.reject(ValidationRejection(s"Unknown short url $r"))
+    } ~
+      path(Rest) { r =>
+        get { ctx =>
+          Future(redisClient.get(r)).mapTo[Option[String]].map {
+            case Some(result) => ctx.redirect(result, StatusCodes.MovedPermanently)
+            case None => ctx.reject(ValidationRejection(s"Unknown short url $r"))
+          }
         }
       }
-    }
 
-    //}
   }
+
 }
